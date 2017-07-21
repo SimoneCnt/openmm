@@ -56,6 +56,17 @@ from simtk.openmm.app.internal.charmm.exceptions import (
                 MissingParameter, CharmmPsfEOF)
 import warnings
 
+# CHARMM GBSW
+try:
+    from openmmgbsw import GBSWForce
+except ImportError:
+    print("WARNING! Impossible to load the GBSW CHARMM plugin!")
+    print("         GBSW implicit model solvent disabled!")
+    HAVE_GBSW = False
+else:
+    HAVE_GBSW = True
+    from simtk.openmm.app.internal.charmm.get_gbsw_radius import get_gbsw_radius
+
 TINY = 1e-8
 WATNAMES = ('WAT', 'HOH', 'TIP3', 'TIP4', 'TIP5', 'SPCE', 'SPC')
 if sys.version_info >= (3, 0):
@@ -156,7 +167,7 @@ class CharmmPsfFile(object):
     IMPROPER_FORCE_GROUP = 4
     CMAP_FORCE_GROUP = 5
     NONBONDED_FORCE_GROUP = 6
-    GB_FORCE_GROUP = 6
+    GB_FORCE_GROUP = 7
 
     @_catchindexerror
     def __init__(self, psf_name):
@@ -752,7 +763,7 @@ class CharmmPsfFile(object):
                                               ff.Ewald, ff.PME):
             raise ValueError('Illegal nonbonded method for a '
                              'non-periodic system')
-        if implicitSolvent not in (HCT, OBC1, OBC2, GBn, GBn2, None):
+        if implicitSolvent not in (HCT, OBC1, OBC2, GBn, GBn2, 'GBSW', None):
             raise ValueError('Illegal implicit solvent model choice.')
         if not constraints in (None, ff.HAngles, ff.HBonds, ff.AllBonds):
             raise ValueError('Illegal constraints choice')
@@ -1185,10 +1196,11 @@ class CharmmPsfFile(object):
                 implicitSolventKappa *= 7.3
             elif implicitSolvent is None:
                 implicitSolventKappa = 0.0
-
             if u.is_quantity(implicitSolventKappa):
                 implicitSolventKappa = implicitSolventKappa.value_in_unit(
                                             (1.0/u.nanometer).unit)
+
+            # Create GB energy term
             if implicitSolvent is HCT:
                 gb = GBSAHCTForce(solventDielectric, soluteDielectric, None,
                                   cutoff, kappa=implicitSolventKappa)
@@ -1204,17 +1216,50 @@ class CharmmPsfFile(object):
             elif implicitSolvent is GBn2:
                 gb = GBSAGBn2Force(solventDielectric, soluteDielectric, None,
                                    cutoff, kappa=implicitSolventKappa)
-            gb_parms = gb.getStandardParameters(self.topology)
-            for atom, gb_parm in zip(self.atom_list, gb_parms):
-                gb.addParticle([atom.charge] + list(gb_parm))
+            elif implicitSolvent is 'GBSW':
+                if not HAVE_GBSW:
+                    raise RuntimeError("GBSW plugin not available!") from error
+                gb = GBSWForce()
+                gb.setSolventDielectric(solventDielectric)
+                gb.setSoluteDielectric(soluteDielectric)
+                gb.setDebyeHuckelLength(implicitSolventKappa)
+                gb.setSurfaceAreaEnergy(0.0) # in kj/mol/(nanometer^2)
+                gb.setAA0(-0.1801)
+                gb.setAA1(1.8174)
+                gb.setNumGauLegRad(24)
+                gb.setNumLebAng(50)
+                gb.setSwitchingLength(0.03)
+                gb.setMembraneThickness(0.0)
+                gb.setMembraneSwLen(0.0)
+                gb.setReactionFieldDielectric(1.0)
+
+            # Assign atom parameters
+            if implicitSolvent is 'GBSW':
+                for atom in self.atom_list:
+                    gbsw_rad = get_gbsw_radius(atom.name, atom.residue.resname)
+                    gb.addParticle(atom.charge, gbsw_rad/10.0)
+            else:
+                gb_parms = gb.getStandardParameters(self.topology)
+                for atom, gb_parm in zip(self.atom_list, gb_parms):
+                    gb.addParticle([atom.charge] + list(gb_parm))
+
             # Set cutoff method
             if nonbondedMethod is ff.NoCutoff:
-                gb.setNonbondedMethod(mm.NonbondedForce.NoCutoff)
+                if implicitSolvent is 'GBSW':
+                    gb.setNonbondedMethod(gb.NoCutoff)
+                else:
+                    gb.setNonbondedMethod(mm.NonbondedForce.NoCutoff)
             elif nonbondedMethod is ff.CutoffNonPeriodic:
-                gb.setNonbondedMethod(mm.NonbondedForce.CutoffNonPeriodic)
+                if implicitSolvent is 'GBSW':
+                    gb.setNonbondedMethod(gb.CutoffNonPeriodic)
+                else:
+                    gb.setNonbondedMethod(mm.NonbondedForce.CutoffNonPeriodic)
                 gb.setCutoffDistance(cutoff)
             elif nonbondedMethod is ff.CutoffPeriodic:
-                gb.setNonbondedMethod(mm.NonbondedForce.CutoffPeriodic)
+                if implicitSolvent is 'GBSW':
+                    gb.setNonbondedMethod(gb.CutoffPeriodic)
+                else:
+                    gb.setNonbondedMethod(mm.NonbondedForce.CutoffPeriodic)
                 gb.setCutoffDistance(cutoff)
             else:
                 raise ValueError('Illegal nonbonded method for use with GBSA')
