@@ -347,9 +347,9 @@ class CharmmPsfFile(object):
         set_molecules(atom_list)
         molecule_list = [atom.marked for atom in atom_list]
         if len(holder) == len(atom_list):
-            if molecule_list != holder:
-                warnings.warn('Detected PSF molecule section that is WRONG. '
-                              'Resetting molecularity.', CharmmPSFWarning)
+            #if molecule_list != holder:
+                #warnings.warn('Detected PSF molecule section that is WRONG. '
+                #              'Resetting molecularity.', CharmmPSFWarning)
             # We have a CHARMM PSF file; now do NUMLP/NUMLPH sections
             numlp, numlph = psfsections['NUMLP NUMLPH'][0]
             if numlp != 0 or numlph != 0:
