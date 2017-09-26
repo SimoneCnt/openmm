@@ -97,6 +97,13 @@ class PDBFile(object):
                 inputfile.close()
         PDBFile._loadNameReplacementTables()
 
+        # Set occupancy and temperature factor
+        self.occupancy = list()
+        self.temperature_factor = list()
+        for atom in pdb.iter_atoms():
+            self.occupancy.append(atom.get_occupancy())
+            self.temperature_factor.append(atom.get_temperature_factor())
+        
         # Build the topology
 
         atomByNumber = {}
