@@ -57,7 +57,7 @@ class StateDataReporter(object):
     """
 
     def __init__(self, file, reportInterval, step=False, time=False, potentialEnergy=False, kineticEnergy=False, totalEnergy=False, temperature=False, volume=False, density=False,
-                 progress=False, remainingTime=False, speed=False, elapsedTime=False, separator=',', systemMass=None, totalSteps=None):
+                 progress=False, remainingTime=False, speed=False, elapsedTime=False, separator=',', systemMass=None, totalSteps=None, append=False):
         """Create a StateDataReporter.
 
         Parameters
@@ -111,6 +111,7 @@ class StateDataReporter(object):
         """
         self._reportInterval = reportInterval
         self._openedFile = isinstance(file, str)
+        self._append = append
         if (progress or remainingTime) and totalSteps is None:
             raise ValueError('Reporting progress or remaining time requires total steps to be specified')
         if self._openedFile:
@@ -119,13 +120,20 @@ class StateDataReporter(object):
             if file.endswith('.gz'):
                 if not have_gzip:
                     raise RuntimeError("Cannot write .gz file because Python could not import gzip library")
+                if append:
+                    raise RuntimeError("Cannot use append with .gz file")
                 self._out = gzip.GzipFile(fileobj=open(file, 'wb', 0))
             elif file.endswith('.bz2'):
                 if not have_bz2:
                     raise RuntimeError("Cannot write .bz2 file because Python could not import bz2 library")
+                if append:
+                    raise RuntimeError("Cannot use append with .bz2 file")
                 self._out = bz2.BZ2File(file, 'w', 0)
             else:
-                self._out = open(file, 'w')
+                if (self._append):
+                    self._out = open(file, 'a')
+                else:
+                    self._out = open(file, 'w')
         else:
             self._out = file
         self._step = step
