@@ -97,10 +97,12 @@ class PDBFile(object):
                 inputfile.close()
         PDBFile._loadNameReplacementTables()
 
-        # Set occupancy and temperature factor
+        # Set atomName, occupancy and temperature factor
+        self.atom_name = list()
         self.occupancy = list()
         self.temperature_factor = list()
         for atom in pdb.iter_atoms():
+            self.atom_name.append(atom.get_name().strip())
             self.occupancy.append(atom.get_occupancy())
             self.temperature_factor.append(atom.get_temperature_factor())
         
