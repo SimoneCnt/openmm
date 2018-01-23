@@ -896,12 +896,15 @@ class CharmmPsfFile(object):
 
         # Add the urey-bradley terms
         if verbose: print('Adding Urey-Bradley terms')
-        force = mm.HarmonicBondForce()
+        #force = mm.HarmonicBondForce()
+        force = mm.CustomBondForce("0.5*k*(r-r0)^2");
+        force.addPerBondParameter("r0");
+        force.addPerBondParameter("k");
         force.setForceGroup(self.UREY_BRADLEY_FORCE_GROUP)
         for ub in self.urey_bradley_list:
             force.addBond(ub.atom1.idx, ub.atom2.idx,
-                          ub.ub_type.req*length_conv,
-                          2*ub.ub_type.k*bond_frc_conv)
+                          (ub.ub_type.req*length_conv,
+                          2*ub.ub_type.k*bond_frc_conv))
         system.addForce(force)
 
         # Add dihedral forces
